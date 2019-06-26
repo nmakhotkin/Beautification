@@ -202,7 +202,7 @@ def beauty(landmarks_driver, img, face_box):
     cr_mean, cr_std = cr_vals.mean(), cr_vals.std()
     cb_mean, cb_std = cb_vals.mean(), cb_vals.std()
 
-    factor = [1.5, 1.5, 1.5]
+    factor = [1.4, 1.8, 1.8]
     indices_y = np.where(
         (y_mean - y_std * factor[0] > face_y[:, :, 0:1]) | (face_y[:, :, 0:1] > y_mean + y_std * factor[0])
     )[:2]
@@ -219,10 +219,10 @@ def beauty(landmarks_driver, img, face_box):
     mask[indices_cr] = 0
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    skin_mask = cv2.erode(mask, kernel, iterations=2)
-    skin_mask = cv2.dilate(skin_mask, kernel, iterations=2)
+    mask = cv2.erode(mask, kernel, iterations=3)
+    mask = cv2.dilate(mask, kernel, iterations=3)
 
-    # res = cv2.bitwise_and(face, face, mask=skin_mask)
+    # res = cv2.bitwise_and(face, face, mask=mask)
     # cv2.imshow("Res", res)
     # cv2.waitKey(0)
 
@@ -231,8 +231,11 @@ def beauty(landmarks_driver, img, face_box):
 
     # texture = np.clip(tone[:, :, 0:1] - face_y[:, :, 0:1] * 0.5, 0, 255).astype(np.uint8)
 
-    filtered = cv2.bilateralFilter(face, 8, 75, 75)
-    mixed = cv2.seamlessClone(filtered, face, mask * 255, (face.shape[1] // 2, face.shape[0] // 2), cv2.NORMAL_CLONE)
+    size = face.shape[1] // 35
+    filtered = cv2.bilateralFilter(face, size if size >= 9 else 9, 75, 75)
+    mixed = cv2.seamlessClone(
+        filtered, face, mask * 255, (face.shape[1] // 2, face.shape[0] // 2), cv2.NORMAL_CLONE
+    )
 
     # cv2.imshow("Res", mixed)
 
