@@ -194,29 +194,30 @@ def beauty(landmarks_driver, img, face_box):
 
     face_y = cv2.cvtColor(face, cv2.COLOR_BGR2YCrCb)
 
-    y_vals = face_y[:, :, 0:1][mask > 0]
-    cr_vals = face_y[:, :, 1:2][mask > 0]
-    cb_vals = face_y[:, :, 2:3][mask > 0]
+    for i in range(2):
+        y_vals = face_y[:, :, 0:1][mask > 0]
+        cr_vals = face_y[:, :, 1:2][mask > 0]
+        cb_vals = face_y[:, :, 2:3][mask > 0]
 
-    y_mean, y_std = y_vals.mean(), y_vals.std()
-    cr_mean, cr_std = cr_vals.mean(), cr_vals.std()
-    cb_mean, cb_std = cb_vals.mean(), cb_vals.std()
+        y_mean, y_std = y_vals.mean(), y_vals.std()
+        cr_mean, cr_std = cr_vals.mean(), cr_vals.std()
+        cb_mean, cb_std = cb_vals.mean(), cb_vals.std()
 
-    factor = [1.4, 1.8, 1.8]
-    indices_y = np.where(
-        (y_mean - y_std * factor[0] > face_y[:, :, 0:1]) | (face_y[:, :, 0:1] > y_mean + y_std * factor[0])
-    )[:2]
-    indices_cr = np.where(
-        (cr_mean - cr_std * factor[1] > face_y[:, :, 1:2]) | (face_y[:, :, 1:2] > cr_mean + cr_std * factor[1])
-    )[:2]
-    indices_cb = np.where(
-        (cb_mean - cb_std * factor[2] > face_y[:, :, 2:3]) | (face_y[:, :, 2:3] > cb_mean + cb_std * factor[2])
-    )[:2]
+        factor = [2., 2.2, 2.2]
+        indices_y = np.where(
+            (y_mean - y_std * factor[0] > face_y[:, :, 0:1]) | (face_y[:, :, 0:1] > y_mean + y_std * factor[0])
+        )[:2]
+        indices_cr = np.where(
+            (cr_mean - cr_std * factor[1] > face_y[:, :, 1:2]) | (face_y[:, :, 1:2] > cr_mean + cr_std * factor[1])
+        )[:2]
+        indices_cb = np.where(
+            (cb_mean - cb_std * factor[2] > face_y[:, :, 2:3]) | (face_y[:, :, 2:3] > cb_mean + cb_std * factor[2])
+        )[:2]
 
-    # Remove pixels from mask
-    mask[indices_y] = 0
-    mask[indices_cb] = 0
-    mask[indices_cr] = 0
+        # Remove pixels from mask
+        mask[indices_y] = 0
+        mask[indices_cb] = 0
+        mask[indices_cr] = 0
 
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     mask = cv2.erode(mask, kernel, iterations=3)
@@ -226,15 +227,25 @@ def beauty(landmarks_driver, img, face_box):
     # cv2.imshow("Res", res)
     # cv2.waitKey(0)
 
-    # skin_mask = cv2.GaussianBlur(skin_mask, (3, 3), 0)
+    size = face.shape[1] // 35
+    size_blur = face.shape[1] // 20
+    size_odd = size_blur if size_blur % 2 != 0 else size_blur - 1
+    mask = mask * 255
+    mask = cv2.GaussianBlur(mask, (size_odd, size_odd), 0)
+    # __import__('ipdb').set_trace()
+    mask = np.expand_dims(mask, axis=2)
     # tone = cv2.GaussianBlur(face_y, (15, 15), 0)
 
     # texture = np.clip(tone[:, :, 0:1] - face_y[:, :, 0:1] * 0.5, 0, 255).astype(np.uint8)
 
-    size = face.shape[1] // 35
+    # Multiply the background with ( alpha )
+    # res = (mask.astype(float) / 255 * face).astype(np.uint8)
+    # cv2.imshow("Res", res)
+    # cv2.waitKey(0)
+
     filtered = cv2.bilateralFilter(face, size if size >= 9 else 9, 75, 75)
     mixed = cv2.seamlessClone(
-        filtered, face, mask * 255, (face.shape[1] // 2, face.shape[0] // 2), cv2.NORMAL_CLONE
+        filtered, face, mask, (face.shape[1] // 2, face.shape[0] // 2), cv2.NORMAL_CLONE
     )
 
     # cv2.imshow("Res", mixed)
