@@ -41,10 +41,19 @@ def get_boxes(face_driver, frame, threshold=0.5, offset=(0, 0)):
     boxes = np.concatenate((boxes, confidence), axis=1)
     # Assign confidence to 4th
     # boxes[:, 4] = bboxes_raw[:, 2]
-    boxes[:, 0] = boxes[:, 0] * frame.shape[1] + offset[0]
-    boxes[:, 2] = boxes[:, 2] * frame.shape[1] + offset[0]
-    boxes[:, 1] = boxes[:, 1] * frame.shape[0] + offset[1]
-    boxes[:, 3] = boxes[:, 3] * frame.shape[0] + offset[1]
+    xmin = boxes[:, 0] * frame.shape[1] + offset[0]
+    xmax = boxes[:, 2] * frame.shape[1] + offset[0]
+    ymin = boxes[:, 1] * frame.shape[0] + offset[1]
+    ymax = boxes[:, 3] * frame.shape[0] + offset[1]
+    xmin[xmin < 0] = 0
+    xmax[xmax > frame.shape[1]] = frame.shape[1]
+    ymin[ymin < 0] = 0
+    ymax[ymax > frame.shape[0]] = frame.shape[0]
+
+    boxes[:, 0] = xmin
+    boxes[:, 2] = xmax
+    boxes[:, 1] = ymin
+    boxes[:, 3] = ymax
     return boxes
 
 
@@ -88,63 +97,12 @@ def get_landmarks(model, frame, box):
     return shape
 
 
-# Apply affine transform calculated using srcTri and dstTri to src and
-# output an image of size.
-def apply_affine_transform(src, src_tri, dst_tri, size):
-    # Given a pair of triangles, find the affine transform.
-    warp_mat = cv2.getAffineTransform(np.float32(src_tri), np.float32(dst_tri))
-
-    # Apply the Affine Transform just found to the src image
-    dst = cv2.warpAffine(
-        src, warp_mat, (size[0], size[1]), None, flags=cv2.INTER_LINEAR,
-        borderMode=cv2.BORDER_REFLECT_101
-    )
-
-    return dst
-
-
-# Warps and alpha blends triangular regions from img1 and img2 to img
-def warp_triangle(img1, img2, t1, t2):
-    # Find bounding rectangle for each triangle
-    r1 = cv2.boundingRect(np.float32([t1]))
-    r2 = cv2.boundingRect(np.float32([t2]))
-
-    # Offset points by left top corner of the respective rectangles
-    t1_rect = []
-    t2_rect = []
-    t2_rect_int = []
-
-    for i in range(0, 3):
-        t1_rect.append(((t1[i][0] - r1[0]), (t1[i][1] - r1[1])))
-        t2_rect.append(((t2[i][0] - r2[0]), (t2[i][1] - r2[1])))
-        t2_rect_int.append(((t2[i][0] - r2[0]), (t2[i][1] - r2[1])))
-
-    # Get mask by filling triangle
-    mask = np.zeros((r2[3], r2[2], 3), dtype=np.float32)
-    cv2.fillConvexPoly(mask, np.int32(t2_rect_int), (1.0, 1.0, 1.0), 16, 0)
-
-    # Apply warpImage to small rectangular patches
-    img1_rect = img1[r1[1]:r1[1] + r1[3], r1[0]:r1[0] + r1[2]]
-
-    size = (r2[2], r2[3])
-
-    img2_rect = apply_affine_transform(img1_rect, t1_rect, t2_rect, size)
-
-    img2_rect = img2_rect * mask
-
-    # Copy triangular region of the rectangular patch to the output image
-    img2[r2[1]:r2[1] + r2[3], r2[0]:r2[0] + r2[2]] = img2[r2[1]:r2[1] + r2[3], r2[0]:r2[0] + r2[2]] * (
-                (1.0, 1.0, 1.0) - mask)
-
-    img2[r2[1]:r2[1] + r2[3], r2[0]:r2[0] + r2[2]] = img2[r2[1]:r2[1] + r2[3], r2[0]:r2[0] + r2[2]] + img2_rect
-
-
 def draw_points(img, points, color=(0, 0, 250)):
     for x, y in points:
         cv2.circle(img, (int(x), int(y)), 3, color, cv2.FILLED, cv2.LINE_AA)
 
 
-def diselect_contour(contour, mask, img, box, draw=False):
+def select_contour(contour, mask, img, box, color=0, draw=False):
     tck, u = interpolate.splprep(contour.transpose(), u=None, s=0.0, per=1)
     u_new = np.linspace(u.min(), u.max(), 100)
     xs, ys = interpolate.splev(u_new, tck, der=0)
@@ -156,11 +114,11 @@ def diselect_contour(contour, mask, img, box, draw=False):
     if draw:
         cv2.fillConvexPoly(img, points.astype(int), (250, 250, 250), cv2.LINE_AA)
 
-    cv2.fillConvexPoly(mask, np.round(relative_points).astype(int), 0, cv2.LINE_AA)
+    cv2.fillConvexPoly(mask, np.round(relative_points).astype(int), color, cv2.LINE_AA)
     cv2.polylines(
         mask,
         [np.round(relative_points).astype(np.int32)],
-        1, 0, thickness=3, lineType=cv2.LINE_AA
+        1, color, thickness=3, lineType=cv2.LINE_AA
     )
 
 
@@ -172,12 +130,14 @@ def beauty(landmarks_driver, img, face_box):
     mouth = face_landmarks[48:60]
     left_brow = face_landmarks[17:22]
     right_brow = face_landmarks[22:27]
+    # left_chin = face_landmarks[0:5] + face_landmarks[31:32] + face_landmarks[36:37]
 
     # draw_points(img, left_eye, (250, 0, 0))
     # draw_points(img, right_eye, (0, 250, 0))
     # draw_points(img, mouth, (250, 0, 250))
     # draw_points(img, left_brow, (250, 250, 0))
     # draw_points(img, right_brow, (0, 250, 250))
+    # draw_points(img, left_chin, (0, 250, 250))
 
     face = crop_by_box(img, face_box)
     mask = np.ones_like(face[:, :, 0])
@@ -185,8 +145,9 @@ def beauty(landmarks_driver, img, face_box):
 
     contours = [left_eye, right_eye, mouth, left_brow, right_brow]
     for c in contours:
-        diselect_contour(c, mask, img, face_box, draw=False)
+        select_contour(c, mask, img, face_box, draw=False)
 
+    # select_contour(left_chin, mask, img, face_box, draw=True)
     # res = cv2.bitwise_and(face, face, mask=mask.squeeze())
     # cv2.imshow("Res", res)
     # cv2.waitKey(0)
@@ -249,6 +210,7 @@ def beauty(landmarks_driver, img, face_box):
     )
 
     # cv2.imshow("Res", mixed)
+    # cv2.waitKey(0)
 
     center_box = (int(face_box[0] + face.shape[1] / 2), int(face_box[1] + face.shape[0] / 2))
 
