@@ -188,7 +188,7 @@ def beauty(landmarks_driver, img, face_box):
     # cv2.imshow("Res", res)
     # cv2.waitKey(0)
 
-    size = face.shape[1] // 35
+    size = face.shape[1] // 27
     size_blur = face.shape[1] // 20
     size_odd = size_blur if size_blur % 2 != 0 else size_blur - 1
     mask = mask * 255
