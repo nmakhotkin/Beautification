@@ -145,7 +145,10 @@ def beauty(landmarks_driver, img, face_box):
 
     contours = [left_eye, right_eye, mouth, left_brow, right_brow]
     for c in contours:
-        select_contour(c, mask, img, face_box, draw=False)
+        try:
+            select_contour(c, mask, img, face_box, draw=False)
+        except Exception as e:
+            LOG.warning("Error during select contour(interpolate): %s" % e)
 
     # select_contour(left_chin, mask, img, face_box, draw=True)
     # res = cv2.bitwise_and(face, face, mask=mask.squeeze())
